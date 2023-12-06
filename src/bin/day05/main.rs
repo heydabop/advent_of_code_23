@@ -71,6 +71,7 @@ fn main() {
             .map(|s| s.parse().unwrap())
             .collect()
     };
+    let seed_ranges: Vec<(u64, u64)> = seeds.chunks(2).map(|c| (c[0], c[1])).collect();
     lines.next().unwrap(); //skip blank line
     let mut maps = vec![];
     loop {
@@ -93,5 +94,15 @@ fn main() {
     // run all seeds through every map, and return lowest final value
     let almanac = Almanac::new(maps);
     let min_location = seeds.into_iter().map(|s| almanac.convert(s)).min().unwrap();
-    println!("{min_location}");
+    println!("part 1: {min_location}");
+
+    // takes a computer less time to do this than it takes for me to write a smarter algorithm
+    let mut min_location = u64::MAX;
+    for (start, len) in seed_ranges {
+        for seed in start..start + len {
+            let seed_location = almanac.convert(seed);
+            min_location = min_location.min(seed_location);
+        }
+    }
+    println!("part 2: {min_location}");
 }
