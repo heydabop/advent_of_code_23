@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 struct MapSegment {
     source: u64,
     dest: u64,
@@ -21,6 +22,7 @@ impl MapSegment {
     }
 }
 
+#[derive(Clone)]
 struct SeedMap {
     segments: Vec<MapSegment>,
 }
@@ -41,6 +43,7 @@ impl SeedMap {
     }
 }
 
+#[derive(Clone)]
 struct Almanac {
     maps: Vec<SeedMap>,
 }
@@ -97,12 +100,23 @@ fn main() {
     println!("part 1: {min_location}");
 
     // takes a computer less time to do this than it takes for me to write a smarter algorithm
-    let mut min_location = u64::MAX;
+    let mut threads = vec![];
     for (start, len) in seed_ranges {
-        for seed in start..start + len {
-            let seed_location = almanac.convert(seed);
-            min_location = min_location.min(seed_location);
-        }
+        let t_almanac = almanac.clone();
+        let t = std::thread::spawn(move || {
+            let mut min_location = u64::MAX;
+            for seed in start..start + len {
+                let seed_location = t_almanac.convert(seed);
+                min_location = min_location.min(seed_location);
+            }
+            min_location
+        });
+        threads.push(t);
     }
+    let min_location: u64 = threads
+        .into_iter()
+        .map(|t| t.join().unwrap())
+        .min()
+        .unwrap();
     println!("part 2: {min_location}");
 }
