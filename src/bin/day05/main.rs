@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 #[derive(Clone, Copy)]
 struct MapSegment {
     source: u64,
@@ -100,22 +102,16 @@ fn main() {
     println!("part 1: {min_location}");
 
     // takes a computer less time to do this than it takes for me to write a smarter algorithm
-    let mut threads = vec![];
-    for (start, len) in seed_ranges {
-        let t_almanac = almanac.clone();
-        let t = std::thread::spawn(move || {
+    let min_location: u64 = seed_ranges
+        .into_par_iter()
+        .map(|(start, len)| {
             let mut min_location = u64::MAX;
             for seed in start..start + len {
-                let seed_location = t_almanac.convert(seed);
+                let seed_location = almanac.convert(seed);
                 min_location = min_location.min(seed_location);
             }
             min_location
-        });
-        threads.push(t);
-    }
-    let min_location: u64 = threads
-        .into_iter()
-        .map(|t| t.join().unwrap())
+        })
         .min()
         .unwrap();
     println!("part 2: {min_location}");
