@@ -12,12 +12,12 @@ fn main() {
         .filter_map(|s| s.trim().parse().ok())
         .collect();
     let options: Vec<u64> = times
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, time)| {
             let goal_dist = dists[i];
             let mut wins = 0;
-            for hold_ms in 1..time {
+            for hold_ms in 1..*time {
                 let move_ms = time - hold_ms;
                 let dist = move_ms * hold_ms;
                 if dist > goal_dist {
@@ -27,5 +27,29 @@ fn main() {
             wins
         })
         .collect();
-    println!("{}", options.into_iter().product::<u64>());
+    println!("part 1: {}", options.into_iter().product::<u64>());
+
+    let time: u64 = times
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join("")
+        .parse()
+        .unwrap();
+    let goal_dist: u64 = dists
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join("")
+        .parse()
+        .unwrap();
+    let mut wins = 0;
+    for hold_ms in 1..time {
+        let move_ms = time - hold_ms;
+        let dist = move_ms * hold_ms;
+        if dist > goal_dist {
+            wins += 1;
+        }
+    }
+    println!("part 2: {wins}");
 }
