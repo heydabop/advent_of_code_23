@@ -17,7 +17,8 @@ lazy_static! {
         (b'J', 10),
         (b'Q', 11),
         (b'K', 12),
-        (b'A', 13)
+        (b'A', 13),
+        (b'*', 0), //joker
     ]);
 }
 
@@ -40,8 +41,15 @@ struct Hand {
 }
 
 impl Hand {
-    fn new(cards: &[u8], bid: u64) -> Self {
-        let cards: [u8; 5] = cards.try_into().unwrap();
+    fn new(cards: &[u8], bid: u64, joker_rule: bool) -> Self {
+        let mut cards: [u8; 5] = cards.try_into().unwrap();
+        if joker_rule {
+            for c in &mut cards {
+                if *c == b'J' {
+                    *c = b'*';
+                }
+            }
+        }
 
         Self {
             cards,
@@ -51,33 +59,59 @@ impl Hand {
     }
 
     fn hand_type(cards: &[u8; 5]) -> HandType {
+        use HandType::*;
         if cards.iter().all(|&c| c == cards[0]) {
-            return HandType::FiveOfAKind;
+            return FiveOfAKind;
         }
 
         let mut card_map = HashMap::new();
         for c in cards {
             *card_map.entry(c).or_default() += 1;
         }
+        let jokers = card_map.remove(&b'*').unwrap_or_default();
         let card_counts: Vec<u8> = card_map.into_values().collect();
 
         if card_counts.iter().any(|&c| c == 4) {
-            return HandType::FourOfAKind;
+            if jokers == 1 {
+                return FiveOfAKind;
+            }
+            return FourOfAKind;
         }
         if card_counts.iter().any(|&c| c == 3) {
-            if card_counts.iter().any(|&c| c == 2) {
-                return HandType::FullHouse;
+            if jokers == 2 {
+                return FiveOfAKind;
+            } else if jokers == 1 {
+                return FourOfAKind;
             }
-            return HandType::ThreeOfAKind;
+            if card_counts.iter().any(|&c| c == 2) {
+                return FullHouse;
+            }
+            return ThreeOfAKind;
         }
         let pairs = card_counts.iter().filter(|&&c| c == 2).count();
         if pairs == 2 {
-            return HandType::TwoPair;
+            if jokers == 1 {
+                return FullHouse;
+            }
+            return TwoPair;
         } else if pairs == 1 {
-            return HandType::Pair;
+            if jokers == 3 {
+                return FiveOfAKind;
+            } else if jokers == 2 {
+                return FourOfAKind;
+            } else if jokers == 1 {
+                return ThreeOfAKind;
+            }
+            return Pair;
         }
 
-        HandType::HighCard
+        match jokers {
+            4 => FiveOfAKind,
+            3 => FourOfAKind,
+            2 => ThreeOfAKind,
+            1 => Pair,
+            _ => HighCard,
+        }
     }
 }
 
@@ -112,6 +146,7 @@ fn main() {
             Hand::new(
                 split.next().unwrap().as_bytes(),
                 split.next().unwrap().parse::<u64>().unwrap(),
+                false,
             )
         })
         .collect();
@@ -119,7 +154,20 @@ fn main() {
     println!(
         "part 1: {}",
         hands
-            .into_iter()
+            .iter()
+            .enumerate()
+            .fold(0, |acc, (i, hand)| acc + hand.bid * (i + 1) as u64)
+    );
+
+    let mut hands: Vec<Hand> = hands
+        .into_iter()
+        .map(|h| Hand::new(&h.cards, h.bid, true))
+        .collect();
+    hands.sort();
+    println!(
+        "part 2: {}",
+        hands
+            .iter()
             .enumerate()
             .fold(0, |acc, (i, hand)| acc + hand.bid * (i + 1) as u64)
     );
