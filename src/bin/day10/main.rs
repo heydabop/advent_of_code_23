@@ -26,14 +26,18 @@ struct Point {
     pub y: usize,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Node {
     pub pipe: u8,
+    pub main_loop: bool,
 }
 
 impl Node {
     fn new(pipe: u8) -> Self {
-        Self { pipe }
+        Self {
+            pipe,
+            main_loop: false,
+        }
     }
 
     fn directions(&self) -> Option<[Direction; 2]> {
@@ -61,36 +65,77 @@ impl Map {
     pub fn find_furthest_dist(&mut self) -> usize {
         use Direction::*;
         let mut pos = self.start;
+        self.grid[pos.y][pos.x].main_loop = true;
         let mut dir = if self.traverse(pos, North).1.is_some() {
             North
         } else if self.traverse(pos, East).1.is_some() {
             East
         } else if self.traverse(pos, West).1.is_some() {
             West
-        } else if self.traverse(pos, South).1.is_some() {
-            South
         } else {
             panic!("unable to start loop at {pos:?}");
         };
+        let start_dir = dir;
+        let end_dir;
         let mut length = 0;
-        loop {
+        let furthest = loop {
             let (p, d) = self.traverse(pos, dir);
             pos = p.unwrap();
             length += 1;
             if pos == self.start {
+                end_dir = dir.opposite();
                 break length / 2;
             }
+            self.grid[pos.y][pos.x].main_loop = true;
             dir = d.unwrap();
+        };
+        self.grid[self.start.y][self.start.x].pipe = match (start_dir, end_dir) {
+            (North, South) => b'|',
+            (North, East) => b'L',
+            (North, West) => b'J',
+            (East, West) => b'-',
+            (East, South) => b'F',
+            (West, South) => b'7',
+            _ => panic!("unexpected dir pair {start_dir:?}, {end_dir:?}"),
+        };
+        furthest
+    }
+
+    pub fn find_num_contained_nodes(&self) -> usize {
+        let mut nodes = 0;
+        for row in &self.grid {
+            let mut in_loop = false;
+            for node in row {
+                let dirs = node.directions();
+                if node.main_loop {
+                    if dirs.unwrap().contains(&Direction::North) {
+                        in_loop = !in_loop;
+                    }
+                } else if in_loop {
+                    nodes += 1;
+                }
+            }
         }
+        nodes
     }
 
     fn traverse(&self, mut pos: Point, mut dir: Direction) -> (Option<Point>, Option<Direction>) {
         use Direction::*;
         match dir {
-            North => pos.y -= 1,
+            North => {
+                if pos.y == 0 {
+                    return (None, None);
+                }
+                pos.y -= 1;
+            }
             East => pos.x += 1,
             South => pos.y += 1,
-            West => pos.x -= 1,
+            West => {
+                if pos.x == 0 {
+                    return (None, None);
+                }
+                pos.x -= 1;
+            }
         };
         let Some(node) = self.get_node(pos) else {
             return (None, None);
@@ -131,4 +176,5 @@ fn main() {
         .collect();
     let mut map = Map { start, grid };
     println!("part 1: {}", map.find_furthest_dist());
+    println!("part 2: {}", map.find_num_contained_nodes());
 }
