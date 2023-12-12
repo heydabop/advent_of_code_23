@@ -1,8 +1,11 @@
-use std::{collections::VecDeque, fmt};
+use std::fmt;
 
 struct StarMap {
-    map: Vec<VecDeque<Option<u16>>>, // Some(val) indicates a galaxy, numbered for ID
-    galaxies: Vec<(i64, i64)>,       // coordinates of galaxies in map, indxed by galaxy number
+    map: Vec<Vec<Option<u16>>>, // Some(val) indicates a galaxy, numbered for ID
+    galaxies: Vec<(u64, u64)>,  // coordinates of galaxies in map, indxed by galaxy number
+    empty_rows: Vec<u64>,       // rows with no galaxies in them
+    empty_cols: Vec<u64>,       // columns with no galaxies in them
+    expansion_factor: u32,      // how many "extra" rows/columns an empty row/column is
 }
 
 impl fmt::Display for StarMap {
@@ -22,42 +25,38 @@ impl fmt::Display for StarMap {
 }
 
 impl StarMap {
-    fn new(input: &str) -> Self {
-        // read map from input, true indicates a galaxy
-        let unexpanded_map: Vec<Vec<bool>> = input
-            .lines()
-            .map(|line| line.chars().map(|c| c == '#').collect())
-            .collect();
+    fn new(input: &str, expansion_factor: u32) -> Self {
+        // read map from input, incrementing galaxy IDs and marking empty rows along the way
         let mut num_galaxies = 0;
-        let mut map: Vec<VecDeque<Option<u16>>> = vec![];
-        for row in unexpanded_map.into_iter() {
-            let double = row.iter().all(|&g| !g);
-            // any row that's empty gets expanded
-            if double {
-                map.push(vec![None; row.len()].into());
-                map.push(vec![None; row.len()].into());
-                continue;
-            }
-            // otherwise, insert a row, ensuring to increment galaxy IDs
-            map.push(
-                row.iter()
-                    .map(|g| {
-                        if *g {
+        let mut empty_rows = vec![];
+        let mut empty_cols = vec![];
+        let map: Vec<Vec<Option<u16>>> = input
+            .lines()
+            .enumerate()
+            .map(|(i, line)| {
+                let mut empty = true;
+                // construct row, recording if its empty
+                let row = line
+                    .chars()
+                    .map(|c| {
+                        if c == '#' {
+                            empty = false;
                             num_galaxies += 1;
                             Some(num_galaxies - 1)
                         } else {
                             None
                         }
                     })
-                    .collect(),
-            );
-        }
+                    .collect();
+                if empty {
+                    empty_rows.push(u64::try_from(i).unwrap());
+                }
+                row
+            })
+            .collect();
 
-        // manually iterate through map, since modifying map while using an iter on it seems unwise/impossible
-        // effectively `for i in 0..cols` but i and cols will grow
-        let mut cols = map[0].len();
-        let mut i = 0;
-        loop {
+        // check for empty columns
+        for i in 0..map.len() {
             let mut empty = true;
             for row in &map {
                 if row[i].is_some() {
@@ -66,33 +65,28 @@ impl StarMap {
                     break;
                 }
             }
-            // if this column is empty, insert another empty column before this one
             if empty {
-                for row in map.iter_mut() {
-                    row.insert(i, None);
-                }
-                // increment both our index counter and the total length of the map
-                i += 1;
-                cols += 1;
-            }
-            // normal loop increment and range check
-            i += 1;
-            if i == cols {
-                break;
+                empty_cols.push(u64::try_from(i).unwrap());
             }
         }
 
-        // now that map is expanded, find and store coordinates of galaxies
+        // find and store unexpanded coordinates of galaxies
         let mut galaxies = vec![(0, 0); num_galaxies as usize];
         for (y, row) in map.iter().enumerate() {
             for (x, g) in row.iter().enumerate() {
                 if let Some(id) = g {
-                    galaxies[*id as usize] = (i64::try_from(y).unwrap(), i64::try_from(x).unwrap());
+                    galaxies[*id as usize] = (u64::try_from(y).unwrap(), u64::try_from(x).unwrap());
                 }
             }
         }
 
-        Self { map, galaxies }
+        Self {
+            map,
+            galaxies,
+            empty_rows,
+            empty_cols,
+            expansion_factor: expansion_factor - 1, // leaving this as is means we double-count the original row during path finding, so subtract 1 here
+        }
     }
 
     // return the sum of all paths between every pair of galaxies
@@ -111,7 +105,31 @@ impl StarMap {
         let mut dists = vec![0; self.galaxies.len() - galaxy - 1];
         let root = self.galaxies[galaxy];
         for (i, (y, x)) in self.galaxies[galaxy + 1..].iter().enumerate() {
-            dists[i] = u64::try_from((root.0 - y).abs() + (root.1 - x).abs()).unwrap();
+            let mut sorted_y = [root.0, *y];
+            sorted_y.sort();
+            let mut sorted_x = [root.1, *x];
+            sorted_x.sort();
+            // first get normal distances between galaxies
+            let unexpanded_y = sorted_y[1] - sorted_y[0];
+            let unexpanded_x = sorted_x[1] - sorted_x[0];
+            // then find how many empty columns and rows are between the two, and increase distance using expansion factor
+            let mut num_empty_rows = 0;
+            for &empty_row in &self.empty_rows {
+                // row is between galaxies
+                if empty_row > sorted_y[0] && empty_row < sorted_y[1] {
+                    num_empty_rows += 1;
+                }
+            }
+            let mut num_empty_cols = 0;
+            for &empty_col in &self.empty_cols {
+                // column is between galaxies
+                if empty_col > sorted_x[0] && empty_col < sorted_x[1] {
+                    num_empty_cols += 1;
+                }
+            }
+            let dist_y = unexpanded_y + num_empty_rows * self.expansion_factor as u64;
+            let dist_x = unexpanded_x + num_empty_cols * self.expansion_factor as u64;
+            dists[i] = dist_y + dist_x;
         }
         dists
     }
@@ -119,6 +137,8 @@ impl StarMap {
 
 fn main() {
     let input = std::fs::read_to_string("input.txt").unwrap();
-    let map = StarMap::new(&input);
-    println!("part 1: {}", map.shortest_paths_between_all_pairs());
+    let map1 = StarMap::new(&input, 2);
+    println!("part 1: {}", map1.shortest_paths_between_all_pairs());
+    let map2 = StarMap::new(&input, 1000000);
+    println!("part 2: {}", map2.shortest_paths_between_all_pairs());
 }
