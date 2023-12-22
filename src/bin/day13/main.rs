@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[derive(Clone)]
 struct Pattern {
     lines: Vec<Vec<bool>>,
 }
@@ -21,19 +22,45 @@ impl fmt::Display for Pattern {
 }
 
 impl Pattern {
-    fn reflection_value(&self) -> u64 {
-        // rows
+    fn smudged_reflection_value(&self) -> u64 {
+        let current_reflection = self.reflection_value(None);
+        for i in 0..self.lines.len() {
+            for j in 0..self.lines[0].len() {
+                let mut smudged = self.clone();
+                smudged.lines[i][j] = !smudged.lines[i][j];
+                let reflection = smudged.reflection_value(Some(current_reflection));
+                if reflection != 0 && reflection != current_reflection {
+                    return reflection;
+                }
+            }
+        }
+        panic!("doesnt reflect\n{}\n{}", self, current_reflection);
+    }
+
+    fn reflection_value(&self, skip: Option<u64>) -> u64 {
         for i in 1..self.lines.len() {
             if self.reflects_row(i) {
+                let value = 100 * (i as u64);
+                if let Some(skip) = skip {
+                    if value == skip {
+                        continue;
+                    }
+                }
                 return 100 * (i as u64);
             }
         }
         for i in 1..self.lines[0].len() {
             if self.reflects_column(i) {
-                return i as u64;
+                let value = i as u64;
+                if let Some(skip) = skip {
+                    if value == skip {
+                        continue;
+                    }
+                }
+                return value;
             }
         }
-        panic!("doesn't reflect");
+        0
     }
 
     fn reflects_row(&self, index: usize) -> bool {
@@ -75,7 +102,13 @@ fn main() {
     println!(
         "part 1: {}",
         patterns
+            .iter()
+            .fold(0, |acc, p| acc + p.reflection_value(None))
+    );
+    println!(
+        "part 2: {}",
+        patterns
             .into_iter()
-            .fold(0, |acc, p| acc + p.reflection_value())
+            .fold(0, |acc, p| acc + p.smudged_reflection_value())
     );
 }
