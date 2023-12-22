@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 #[derive(Debug)]
 struct Row {
     springs: Vec<Option<bool>>, // true is operational, false is damaged, None is unknown
     groups: Vec<u32>,           // contiguous groups of damaged springs
+    possible_springs: HashMap<Vec<Option<bool>>, Vec<Vec<bool>>>,
 }
 
 impl Row {
@@ -17,12 +20,43 @@ impl Row {
             })
             .collect();
         let groups = s[1].split(',').map(|n| n.parse().unwrap()).collect();
-        Self { springs, groups }
+        Self {
+            springs,
+            groups,
+            possible_springs: HashMap::new(),
+        }
     }
 
-    pub fn possible_arrangements(&self) -> u64 {
+    pub fn from_folded_str(line: &str) -> Self {
+        let s: Vec<_> = line.split(' ').collect();
+        let mut springs = vec![];
+        let folded_springs: Vec<_> = s[0]
+            .chars()
+            .map(|c| match c {
+                '.' => Some(true),
+                '#' => Some(false),
+                '?' => None,
+                _ => panic!("unexpected char {c}"),
+            })
+            .collect();
+        let mut groups = vec![];
+        let folded_groups: Vec<_> = s[1].split(',').map(|n| n.parse().unwrap()).collect();
+        for _ in 0..5 {
+            springs.append(&mut folded_springs.clone());
+            springs.push(None);
+            groups.append(&mut folded_groups.clone());
+        }
+        Self {
+            springs,
+            groups,
+            possible_springs: HashMap::new(),
+        }
+    }
+
+    pub fn possible_arrangements(&mut self) -> u64 {
         // get all possible arrangments
-        let arrangments = Self::generate_possible_springs(&self.springs);
+        let springs = self.springs.clone();
+        let arrangments = self.generate_possible_springs(&springs);
         let mut num_valid = 0;
         // test every arrangment to see if if matches self.groups
         for a in arrangments {
@@ -70,7 +104,10 @@ impl Row {
     }
 
     // recursively generates every possible springs row based on unknown elements
-    fn generate_possible_springs(springs: &[Option<bool>]) -> Vec<Vec<bool>> {
+    fn generate_possible_springs(&mut self, springs: &[Option<bool>]) -> Vec<Vec<bool>> {
+        if let Some(possible) = self.possible_springs.get(springs) {
+            return possible.clone();
+        }
         // generate first element of row
         let heads = if let Some(spring) = springs[0] {
             // either copying existing element if known
@@ -84,7 +121,7 @@ impl Row {
             return heads;
         } else {
             // otherwise, recursively generate the rest of the row
-            Self::generate_possible_springs(&springs[1..])
+            self.generate_possible_springs(&springs[1..])
         };
         let mut possible = vec![];
         // combine possible first elements and rest of rows
@@ -93,16 +130,29 @@ impl Row {
                 possible.push([h.clone(), t.clone()].concat());
             }
         }
+        if springs.len() < 6 {
+            self.possible_springs
+                .insert(springs.to_vec(), possible.clone());
+        }
         possible
     }
 }
 
 fn main() {
-    let input = std::fs::read_to_string("input.txt").unwrap();
-    let rows: Vec<_> = input.lines().map(Row::from_str).collect();
+    let input = std::fs::read_to_string("example.txt").unwrap();
+    let mut part1: Vec<_> = input.lines().map(Row::from_str).collect();
     println!(
         "part 1: {}",
-        rows.iter()
+        part1
+            .iter_mut()
+            .fold(0, |acc, r| acc + r.possible_arrangements())
+    );
+    // TODO: this does not work
+    let mut part2: Vec<_> = input.lines().map(Row::from_folded_str).collect();
+    println!(
+        "part 2: {}",
+        part2
+            .iter_mut()
             .fold(0, |acc, r| acc + r.possible_arrangements())
     );
 }
